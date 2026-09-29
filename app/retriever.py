@@ -1,8 +1,6 @@
 """Hybrid retrieval: dense + BM25 -> reciprocal rank fusion -> cross-encoder rerank."""
 from __future__ import annotations
 
-import math
-
 import numpy as np
 
 from .bm25 import tokenize
@@ -62,9 +60,9 @@ class HybridRetriever:
 
         # 4) rerank the pool with the cross-encoder
         if self.reranker is not None and pool:
-            logits = self.reranker.score(query, [store.chunks[i]["text"] for i in pool])
-            order = np.argsort(-logits)
-            ranked = [(pool[j], 1 / (1 + math.exp(-float(logits[j])))) for j in order]
+            probs = self.reranker.score(query, [store.chunks[i]["text"] for i in pool])  # already in [0, 1]
+            order = np.argsort(-probs)
+            ranked = [(pool[j], float(probs[j])) for j in order]
             # only the cross-encoder score is calibrated enough to threshold on;
             # weak chunks just dilute the context and invite made-up citations
             ranked = [(i, p) for i, p in ranked if p >= min_relevance]

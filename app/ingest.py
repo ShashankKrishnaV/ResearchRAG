@@ -33,37 +33,72 @@ class ParsedDoc:
 # ---------- extraction ----------
 
 def _title_by_font(page) -> str | None:
-    # the title is almost always the biggest horizontal text on page 1
-    runs = []
+    # the title is the biggest horizontal text on page 1 — but judged per *line*,
+    # so small caps, inline math or a mixed-size title don't get cut into pieces
+    lines = []   # each: {"y", "size", "text"}
 
     def visit(text, cm, tm, font_dict, font_size):
-        t = " ".join(text.split())
-        if not t:
+        rotated = any(abs(m) > 0.01 for m in (tm[1], tm[2], cm[1], cm[2]))
+        if not text or rotated:   # skip rotated text, e.g. the arXiv side stamp
             return
-        if abs(tm[1]) > 0.01 or abs(tm[2]) > 0.01:   # rotated text, e.g. the arXiv side stamp
+        if not text.strip():
+            # bare "\n"/spaces arrive with a placeholder position; keep the break, don't open a line
+            if lines:
+                lines[-1]["text"] += "\n" if "\n" in text else " "
             return
-        scale = abs(tm[3] * cm[3]) or 1.0
-        runs.append((round(font_size * scale, 1), t))
+        size = round(font_size * (abs(tm[3] * cm[3]) or 1.0), 1)
+        y = tm[5] * cm[3] + cm[5]
+        has_letters = any(c.isalpha() for c in text)
+        cur = lines[-1] if lines else None
+
+        if cur is not None and tm[4] == 0 and tm[5] == 0:
+            # pypdf sometimes reports a placeholder origin for text right after a line break;
+            # treat it as the next line down (or the same line if no break happened)
+            y = cur["y"] - 1.2 * size if cur["text"].endswith("\n") else cur["y"]
+
+        if cur is None or abs(y - cur["y"]) > 0.5 * max(size, cur["size"], 1.0):
+            cur = {"y": y, "size": 0.0, "text": ""}
+            lines.append(cur)
+        cur["text"] += text
+        if has_letters:
+            cur["size"] = max(cur["size"], size)
 
     try:
         page.extract_text(visitor_text=visit)
     except Exception:
         return None
 
-    usable = [(s, t) for s, t in runs if sum(c.isalpha() for c in t) >= 2 and not _BOILERPLATE.search(t)]
-    if not usable:
+    for ln in lines:
+        ln["text"] = " ".join(ln["text"].split())
+    ok = [i for i, ln in enumerate(lines)
+          if sum(c.isalpha() for c in ln["text"]) >= 2 and not _BOILERPLATE.search(ln["text"])]
+    if not ok:
         return None
-    top = max(s for s, _ in usable)
 
-    # take the first contiguous block of largest-font runs (multi-line titles)
-    parts = []
-    for s, t in runs:
-        if abs(s - top) <= 0.6:
-            parts.append(t)
-        elif parts and len(" ".join(parts)) >= 10:
-            break
-    title = " ".join(" ".join(parts).split()).strip(" *†‡∗")
+    top = max(lines[i]["size"] for i in ok)
+    anchor = next(i for i in ok if lines[i]["size"] >= top - 0.6)
+
+    def belongs(i, ref):
+        # a neighbouring line is part of the title if it's nearly as large and close by
+        ln = lines[i]
+        return (i in ok and ln["size"] >= 0.8 * top
+                and abs(ln["y"] - lines[ref]["y"]) <= 2.2 * top)
+
+    start = end = anchor
+    while start - 1 >= 0 and end - start < 3 and belongs(start - 1, start):
+        start -= 1
+    while end + 1 < len(lines) and end - start < 3 and belongs(end + 1, end):
+        end += 1
+
+    title = " ".join(lines[i]["text"] for i in range(start, end + 1)).strip(" *†‡∗")
     return title if _looks_like_title(title) else None
+
+
+def _usable_metadata_title(t: str) -> bool:
+    # metadata is often junk like "arXiv preprint" or "Conference Paper" — same filter as page text
+    return (_looks_like_title(t)
+            and not _BOILERPLATE.search(t)
+            and not re.search(r"\.(dvi|pdf|tex|docx?)$|^microsoft word|^untitled", t, re.I))
 
 
 def _read_pdf(path: Path) -> tuple[list[Page], str | None]:
@@ -75,7 +110,7 @@ def _read_pdf(path: Path) -> tuple[list[Page], str | None]:
     title = None
     try:
         t = str((reader.metadata or {}).get("/Title") or "").strip()
-        if _looks_like_title(t) and not re.search(r"\.(dvi|pdf|tex|docx?)$|^microsoft word|^untitled", t, re.I):
+        if _usable_metadata_title(t):
             title = t
     except Exception:
         pass
