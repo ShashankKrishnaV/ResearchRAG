@@ -109,12 +109,27 @@ function renderDocuments() {
         </div>
         <a class="btn ghost" href="/ask?doc=${d.id}" title="Ask questions about this paper only">Ask</a>
         <a class="btn ghost" href="/api/documents/${d.id}/file" target="_blank">Open</a>
+        <button class="btn ghost" data-rename="${d.id}">Rename</button>
         <button class="btn ghost danger" data-del="${d.id}">Delete</button>
       </div>`;
   }).join("");
 }
 
 docList.addEventListener("click", async e => {
+  const renameId = e.target.dataset.rename;
+  if (renameId) {
+    const doc = documents.find(d => d.id === renameId);
+    const title = prompt("Paper title", doc.title)?.trim();
+    if (!title || title === doc.title) return;
+    await fetch(`/api/documents/${renameId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ title }),
+    });
+    toast("Title updated");
+    return loadDocuments();
+  }
+
   const id = e.target.dataset.del;
   if (!id) return;
   const doc = documents.find(d => d.id === id);

@@ -1,4 +1,6 @@
 """Grounded answer generation with Command R7B served by Ollama."""
+from __future__ import annotations
+
 import json
 from collections.abc import Iterator
 

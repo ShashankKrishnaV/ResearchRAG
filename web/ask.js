@@ -2,6 +2,7 @@ const form = $("#ask-form");
 const questionEl = $("#question");
 const askBtn = $("#ask-btn");
 const topKEl = $("#top-k");
+const minRelEl = $("#min-rel");
 const answerWrap = $("#answer-wrap");
 const sourcesEl = $("#sources");
 const filterBtn = $("#filter-btn");
@@ -205,8 +206,17 @@ $("#history").addEventListener("click", e => {
 // ---------- ask ----------
 
 function payload(question) {
-  return JSON.stringify({ question, top_k: +topKEl.value, doc_ids: selected.size ? [...selected] : null });
+  return JSON.stringify({
+    question,
+    top_k: +topKEl.value,
+    min_relevance: +minRelEl.value,
+    doc_ids: selected.size ? [...selected] : null,
+  });
 }
+
+// remember the threshold between visits
+minRelEl.value = store.get("rag-min-rel", minRelEl.value);
+minRelEl.addEventListener("change", () => store.set("rag-min-rel", minRelEl.value));
 
 async function runPassages(question) {
   const res = await fetch("/api/search", { method: "POST", headers: { "Content-Type": "application/json" }, body: payload(question) });
@@ -214,8 +224,8 @@ async function runPassages(question) {
   hits = data.hits;
   renderSources();
   renderAnswer({
-    meta: `Retrieved ${hits.length} passages in ${data.elapsed_ms} ms`,
-    note: hits.length ? "" : "No passages found. Try rephrasing, or upload more papers.",
+    meta: `${hits.length} passages passed the relevance filter · ${data.elapsed_ms} ms`,
+    note: data.message ? esc(data.message) : "",
   });
 }
 
@@ -256,7 +266,7 @@ async function runAnswer(question) {
   renderAnswer({
     text,
     note,
-    meta: text ? `Answered from ${hits.length} sources · retrieval ${retrievalMs} ms · total ${(totalMs / 1000).toFixed(1)} s` : "",
+    meta: text ? `Answered from ${hits.length} relevant source${hits.length === 1 ? "" : "s"} · retrieval ${retrievalMs} ms · total ${(totalMs / 1000).toFixed(1)} s` : "",
   });
 }
 

@@ -1,4 +1,6 @@
 """Turn uploaded files into clean, page-aware chunks."""
+from __future__ import annotations
+
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -7,6 +9,12 @@ SUPPORTED = {".pdf", ".docx", ".txt", ".md"}
 
 _REFS_HEADING = re.compile(r"^\s*(references|bibliography|works cited)\s*$", re.I | re.M)
 _SENT_SPLIT = re.compile(r"(?<=[.!?])\s+(?=[A-Z0-9\[(\"'])")
+# running headers, licence notices and venue lines that sit above the real title
+_BOILERPLATE = re.compile(
+    r"arxiv|preprint|published as|conference paper|under review|proceedings|workshop|journal of|"
+    r"copyright|©|licen[cs]e|permission|attribution|all rights|\bdoi\b|https?://|@|vol\.|issn",
+    re.I,
+)
 
 
 @dataclass
@@ -24,20 +32,56 @@ class ParsedDoc:
 
 # ---------- extraction ----------
 
+def _title_by_font(page) -> str | None:
+    # the title is almost always the biggest horizontal text on page 1
+    runs = []
+
+    def visit(text, cm, tm, font_dict, font_size):
+        t = " ".join(text.split())
+        if not t:
+            return
+        if abs(tm[1]) > 0.01 or abs(tm[2]) > 0.01:   # rotated text, e.g. the arXiv side stamp
+            return
+        scale = abs(tm[3] * cm[3]) or 1.0
+        runs.append((round(font_size * scale, 1), t))
+
+    try:
+        page.extract_text(visitor_text=visit)
+    except Exception:
+        return None
+
+    usable = [(s, t) for s, t in runs if sum(c.isalpha() for c in t) >= 2 and not _BOILERPLATE.search(t)]
+    if not usable:
+        return None
+    top = max(s for s, _ in usable)
+
+    # take the first contiguous block of largest-font runs (multi-line titles)
+    parts = []
+    for s, t in runs:
+        if abs(s - top) <= 0.6:
+            parts.append(t)
+        elif parts and len(" ".join(parts)) >= 10:
+            break
+    title = " ".join(" ".join(parts).split()).strip(" *†‡∗")
+    return title if _looks_like_title(title) else None
+
+
 def _read_pdf(path: Path) -> tuple[list[Page], str | None]:
     from pypdf import PdfReader
 
     reader = PdfReader(str(path))
     pages = [Page(i + 1, p.extract_text() or "") for i, p in enumerate(reader.pages)]
 
-    meta_title = None
+    title = None
     try:
-        t = (reader.metadata or {}).get("/Title")
-        if t and len(str(t).strip()) > 5 and not str(t).lower().startswith(("microsoft word", "untitled")):
-            meta_title = str(t).strip()
+        t = str((reader.metadata or {}).get("/Title") or "").strip()
+        if _looks_like_title(t) and not re.search(r"\.(dvi|pdf|tex|docx?)$|^microsoft word|^untitled", t, re.I):
+            title = t
     except Exception:
         pass
-    return pages, meta_title
+    if not title and reader.pages:
+        title = _title_by_font(reader.pages[0])
+    return pages, title
 
 
 def _read_docx(path: Path) -> list[Page]:
@@ -61,13 +105,17 @@ def extract_pages(path: Path) -> tuple[list[Page], str | None]:
 
 # ---------- cleanup ----------
 
+def _looks_like_title(text: str) -> bool:
+    words = text.split()
+    return 2 <= len(words) <= 30 and sum(c.isalpha() for c in text) >= 8
+
+
 def guess_title(pages: list[Page], fallback: str) -> str:
-    # first reasonably sized line on the first page is usually the title
+    # fallback for non-pdf files: first title-ish line that isn't a header/notice
     if pages:
-        for line in pages[0].text.splitlines()[:12]:
+        for line in pages[0].text.splitlines()[:15]:
             line = line.strip().lstrip("#").strip()
-            words = line.split()
-            if 3 <= len(words) <= 25 and not re.search(r"arxiv|@|doi|preprint|vol\.", line, re.I):
+            if _looks_like_title(line) and len(line.split()) >= 3 and not _BOILERPLATE.search(line):
                 return line
     return fallback
 
