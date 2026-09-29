@@ -35,11 +35,18 @@
               <button type="button" class="btn small" id="filter-btn">All papers ▾</button>
               <div class="card filter-menu" id="filter-menu"></div>
             </div>
-            <select id="top-k" title="How many passages to use">
-              <option value="4">4 sources</option>
-              <option value="6" selected>6 sources</option>
-              <option value="8">8 sources</option>
-              <option value="10">10 sources</option>
+            <select id="top-k" title="Maximum passages sent to the model">
+              <option value="4">Up to 4 sources</option>
+              <option value="6" selected>Up to 6 sources</option>
+              <option value="8">Up to 8 sources</option>
+              <option value="10">Up to 10 sources</option>
+            </select>
+            <select id="min-rel" title="Only use passages the reranker scores at least this relevant">
+              <option value="0">Any relevance</option>
+              <option value="0.1">≥ 10% relevant</option>
+              <option value="0.3" selected>≥ 30% relevant</option>
+              <option value="0.5">≥ 50% relevant</option>
+              <option value="0.7">≥ 70% relevant</option>
             </select>
             <div class="seg" id="mode">
               <button type="button" data-mode="answer" class="on">Answer</button>

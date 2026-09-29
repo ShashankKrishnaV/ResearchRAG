@@ -22,7 +22,9 @@ No paid APIs. Embeddings, reranking and generation all run on your machine.
 
 1. Your question is searched two ways: dense (semantic) and BM25 (exact terms, acronyms, formulas).
 2. The two rankings are merged with Reciprocal Rank Fusion.
-3. A cross-encoder (`cross-encoder/ms-marco-MiniLM-L-6-v2`) rereads the top candidates against the question and keeps the best 6.
+3. A cross-encoder (`cross-encoder/ms-marco-MiniLM-L-6-v2`) rereads the top candidates against the question.
+   Only passages it scores **≥ 30% relevant** are kept (up to 6). If none qualify, the LLM isn't called at all —
+   you get a "nothing relevant found" message instead of a stretched answer.
 4. Those chunks go to **Cohere Command R7B** running locally in Ollama, which answers using only the sources and cites them as `[1]`, `[2]`…
 5. The UI streams the answer and shows a source card per citation: paper, page, relevance, snippet, and a link that opens the PDF at that page.
 
@@ -35,6 +37,7 @@ If Ollama isn't running you still get the reranked passages with citations — r
 | Retrieval | Hybrid dense + BM25 | Dense handles paraphrase, BM25 catches exact terms like "BERT-large" or "Eq. 3". |
 | Fusion | RRF (k=60) | Rank-based, so no score calibration between the two retrievers. |
 | Rerank | Cross-encoder | Scores query and chunk together — much sharper than bi-encoder similarity. |
+| Cutoff | Reranker probability ≥ 0.30 | Cosine scores from bge are compressed (unrelated text often scores 0.6+), so the calibrated reranker score is what gets thresholded. |
 | LLM | Command R7B (Ollama) | 7B model trained for grounded RAG with citations, runs on a laptop. |
 | Storage | `.npy` + `.jsonl` files | Transparent, portable, fast enough for thousands of papers. |
 | API/UI | FastAPI + vanilla JS | Two clean pages, zero build step. |
@@ -62,7 +65,7 @@ ResearchRAG/
 
 ## Setup
 
-Requirements: Python 3.10+, [Ollama](https://ollama.com), ~6 GB free disk for the models.
+Requirements: Python 3.9+, [Ollama](https://ollama.com), ~6 GB free disk for the models.
 
 ```bash
 # 1. local LLM
@@ -93,7 +96,8 @@ All settings live in `app/config.py` and can be overridden with environment vari
 | `RAG_LLM_MODEL` | `command-r7b` |
 | `OLLAMA_URL` | `http://localhost:11434` |
 | `RAG_CHUNK_WORDS` / `RAG_CHUNK_OVERLAP` | `220` / `40` |
-| `RAG_TOP_K` | `6` |
+| `RAG_TOP_K` | `6` (max sources per answer) |
+| `RAG_MIN_RELEVANCE` | `0.30` (reranker cutoff, adjustable per question in the UI) |
 
 ## API
 

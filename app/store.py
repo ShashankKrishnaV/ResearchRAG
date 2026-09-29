@@ -1,4 +1,6 @@
 """On-disk index: chunk texts (jsonl), vectors (npy) and a small document registry (json)."""
+from __future__ import annotations
+
 import json
 import os
 import threading
@@ -107,6 +109,14 @@ class IndexStore:
             self.documents[doc["id"]] = doc
             self._bm25 = None
             self._save()
+
+    def update(self, doc_id: str, **fields) -> dict | None:
+        with self._lock:
+            doc = self.documents.get(doc_id)
+            if doc:
+                doc.update(fields)
+                self._save()
+            return doc
 
     def remove(self, doc_id: str) -> bool:
         with self._lock:

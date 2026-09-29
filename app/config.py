@@ -36,7 +36,8 @@ class Settings:
     chunk_overlap: int = int(os.getenv("RAG_CHUNK_OVERLAP", "40"))
 
     candidates: int = int(os.getenv("RAG_CANDIDATES", "30"))  # per retriever, before rerank
-    top_k: int = int(os.getenv("RAG_TOP_K", "6"))
+    top_k: int = int(os.getenv("RAG_TOP_K", "6"))            # upper bound, not a quota
+    min_relevance: float = float(os.getenv("RAG_MIN_RELEVANCE", "0.30"))  # reranker probability cutoff
 
     @property
     def upload_dir(self) -> Path:

@@ -7,6 +7,7 @@ import uuid
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import List, Optional
 
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.concurrency import run_in_threadpool
@@ -52,7 +53,8 @@ app.mount("/static", StaticFiles(directory=WEB), name="static")
 class QueryIn(BaseModel):
     question: str = Field(min_length=2, max_length=2000)
     top_k: int = Field(default=settings.top_k, ge=1, le=15)
-    doc_ids: list[str] | None = None
+    doc_ids: Optional[List[str]] = None  # pydantic evaluates this at runtime, so no `|` on 3.9
+    min_relevance: float = Field(default=settings.min_relevance, ge=0, le=1)
 
 
 # ---------- pages ----------
@@ -96,7 +98,7 @@ def _ingest(path: Path, filename: str, sha: str, size: int) -> dict:
 
 
 @app.post("/api/documents")
-async def upload_documents(files: list[UploadFile] = File(...)):
+async def upload_documents(files: List[UploadFile] = File(...)):
     store: IndexStore = state["store"]
     results = []
 
@@ -138,6 +140,18 @@ def list_documents():
     return {"documents": store.list_documents(), "stats": store.stats()}
 
 
+class DocPatch(BaseModel):
+    title: str = Field(min_length=1, max_length=300)
+
+
+@app.patch("/api/documents/{doc_id}")
+def rename_document(doc_id: str, patch: DocPatch):
+    doc = state["store"].update(doc_id, title=patch.title.strip())
+    if not doc:
+        raise HTTPException(404, "Document not found")
+    return doc
+
+
 @app.delete("/api/documents/{doc_id}")
 def delete_document(doc_id: str):
     if not state["store"].remove(doc_id):
@@ -158,17 +172,32 @@ def get_document_file(doc_id: str):
 
 # ---------- retrieval + generation ----------
 
+def _retrieve(q: QueryIn) -> list[dict]:
+    return state["retriever"].search(q.question, q.top_k, q.doc_ids, q.min_relevance)
+
+
+def _empty_reason(q: QueryIn) -> str:
+    if not state["store"].chunks:
+        return "Nothing to search yet — upload some papers in the Library first."
+    return (f"No passage reached {q.min_relevance:.0%} relevance for this question. "
+            "Try rephrasing, widening the paper filter, or lowering the relevance threshold.")
+
+
 @app.post("/api/search")
 async def search(q: QueryIn):
     t0 = time.perf_counter()
-    hits = await run_in_threadpool(state["retriever"].search, q.question, q.top_k, q.doc_ids)
-    return {"hits": hits, "elapsed_ms": int((time.perf_counter() - t0) * 1000)}
+    hits = await run_in_threadpool(_retrieve, q)
+    return {
+        "hits": hits,
+        "elapsed_ms": int((time.perf_counter() - t0) * 1000),
+        "message": None if hits else _empty_reason(q),
+    }
 
 
 @app.post("/api/ask")
 async def ask(q: QueryIn):
     t0 = time.perf_counter()
-    hits = await run_in_threadpool(state["retriever"].search, q.question, q.top_k, q.doc_ids)
+    hits = await run_in_threadpool(_retrieve, q)
     retrieval_ms = int((time.perf_counter() - t0) * 1000)
 
     def events():
@@ -177,7 +206,7 @@ async def ask(q: QueryIn):
 
         yield emit({"type": "sources", "hits": hits, "retrieval_ms": retrieval_ms})
         if not hits:
-            yield emit({"type": "error", "message": "Nothing to search yet — upload some papers in the Library first."})
+            yield emit({"type": "error", "message": _empty_reason(q)})   # don't let the LLM answer from nothing
             return
         try:
             for token in stream_answer(q.question, hits):
@@ -195,5 +224,6 @@ def health():
         "index": state["store"].stats(),
         "embed_model": settings.embed_model,
         "rerank_model": settings.rerank_model if settings.use_reranker else None,
+        "min_relevance": settings.min_relevance,
         "llm": llm_status(),
     }

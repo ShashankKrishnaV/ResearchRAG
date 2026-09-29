@@ -102,6 +102,25 @@ def test_hybrid_search_finds_right_paper(indexed):
     assert all(h["doc_id"] == "d0" for h in hits)
 
 
+class KeywordReranker:
+    """Stand-in cross-encoder: confident only when the passage mentions BLEU."""
+
+    def score(self, query, passages):
+        return np.array([4.0 if "BLEU" in p else -4.0 for p in passages], dtype=np.float32)
+
+
+def test_min_relevance_drops_weak_chunks(indexed):
+    store, emb = indexed
+    r = HybridRetriever(store, emb, reranker=KeywordReranker())
+
+    hits = r.search("What BLEU score does the Transformer get?", top_k=10, min_relevance=0.3)
+    assert hits and all("BLEU" in h["text"] and h["relevance"] >= 0.3 for h in hits)
+    assert len(hits) < len(r.search("What BLEU score does the Transformer get?", top_k=10))
+
+    # nothing clears a very high bar -> empty, so the LLM is never asked to improvise
+    assert r.search("residual shortcut connections", top_k=6, min_relevance=0.99) == []
+
+
 def test_store_persists_and_removes(indexed, tmp_path):
     store, _ = indexed
     n = len(store.chunks)
