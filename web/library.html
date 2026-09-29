@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Library · ResearchRAG</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="topbar-inner">
+      <a class="brand" href="/"><span class="brand-mark">R</span>ResearchRAG</a>
+      <nav class="nav">
+        <a href="/library" class="active">Library</a>
+        <a href="/ask">Ask</a>
+      </nav>
+      <div class="status" id="status"></div>
+    </div>
+  </header>
+
+  <main>
+    <div class="page-head">
+      <h1>Your paper library</h1>
+      <p>Upload research papers once — they're parsed, chunked and indexed locally so you can ask questions across all of them.</p>
+    </div>
+
+    <label class="dropzone" id="dropzone">
+      <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M12 16V4"/><path d="m6 10 6-6 6 6"/><path d="M4 20h16"/>
+      </svg>
+      <div class="big">Drop papers here or click to browse</div>
+      <div class="muted small">PDF, DOCX, TXT or Markdown · multiple files at once · up to 100 MB each</div>
+      <input type="file" id="file-input" multiple accept=".pdf,.docx,.txt,.md" hidden>
+    </label>
+
+    <div class="queue" id="queue"></div>
+
+    <div class="section-head">
+      <h2>Indexed papers <span class="muted small" id="doc-count"></span></h2>
+      <input type="text" id="doc-filter" placeholder="Filter by title or file name…">
+    </div>
+    <div class="card doc-list" id="doc-list"><div class="empty">Loading…</div></div>
+  </main>
+
+  <script src="/static/common.js"></script>
+  <script src="/static/library.js"></script>
+</body>
+</html>

@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Ask · ResearchRAG</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="topbar-inner">
+      <a class="brand" href="/"><span class="brand-mark">R</span>ResearchRAG</a>
+      <nav class="nav">
+        <a href="/library">Library</a>
+        <a href="/ask" class="active">Ask</a>
+      </nav>
+      <div class="status" id="status"></div>
+    </div>
+  </header>
+
+  <main>
+    <div class="page-head">
+      <h1>Ask your library</h1>
+      <p>Answers come only from the papers you've uploaded, with every claim linked to its source and page.</p>
+    </div>
+
+    <div class="ask-grid">
+      <section>
+        <form class="card ask-box" id="ask-form">
+          <textarea id="question" rows="2" placeholder="e.g. How do these papers evaluate hallucination in long-form generation?" autofocus></textarea>
+          <div class="ask-controls">
+            <div class="filter">
+              <button type="button" class="btn small" id="filter-btn">All papers ▾</button>
+              <div class="card filter-menu" id="filter-menu"></div>
+            </div>
+            <select id="top-k" title="How many passages to use">
+              <option value="4">4 sources</option>
+              <option value="6" selected>6 sources</option>
+              <option value="8">8 sources</option>
+              <option value="10">10 sources</option>
+            </select>
+            <div class="seg" id="mode">
+              <button type="button" data-mode="answer" class="on">Answer</button>
+              <button type="button" data-mode="passages">Passages only</button>
+            </div>
+            <span class="spacer"></span>
+            <button class="btn primary" id="ask-btn" type="submit">Ask ↵</button>
+          </div>
+        </form>
+
+        <div class="examples" id="examples">
+          <button class="chip">What problem does each paper try to solve?</button>
+          <button class="chip">Which datasets and metrics are used for evaluation?</button>
+          <button class="chip">What are the main limitations the authors mention?</button>
+          <button class="chip">Compare the proposed methods and their results</button>
+        </div>
+
+        <div id="answer-wrap"></div>
+
+        <div class="history" id="history"></div>
+      </section>
+
+      <aside class="sources" id="sources"></aside>
+    </div>
+  </main>
+
+  <script src="/static/common.js"></script>
+  <script src="/static/ask.js"></script>
+</body>
+</html>
