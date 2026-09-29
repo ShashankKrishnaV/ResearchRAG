@@ -40,9 +40,19 @@ class Reranker:
         self.model = CrossEncoder(model_name, max_length=512)
 
     def score(self, query: str, passages: list[str]) -> np.ndarray:
+        """Relevance probabilities in [0, 1], one per passage."""
         if not passages:
             return np.zeros(0, dtype=np.float32)
-        return np.asarray(self.model.predict([(query, p) for p in passages], batch_size=16), dtype=np.float32)
+        import torch
+
+        pairs = [(query, p) for p in passages]
+        # ask for sigmoid explicitly instead of relying on the library default;
+        # the kwarg was renamed in sentence-transformers 4
+        try:
+            probs = self.model.predict(pairs, batch_size=16, activation_fn=torch.nn.Sigmoid())
+        except TypeError:
+            probs = self.model.predict(pairs, batch_size=16, activation_fct=torch.nn.Sigmoid())
+        return np.asarray(probs, dtype=np.float32)
 
 
 @lru_cache(maxsize=1)

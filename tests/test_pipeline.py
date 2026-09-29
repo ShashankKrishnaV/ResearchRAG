@@ -103,10 +103,10 @@ def test_hybrid_search_finds_right_paper(indexed):
 
 
 class KeywordReranker:
-    """Stand-in cross-encoder: confident only when the passage mentions BLEU."""
+    """Stand-in cross-encoder: returns probabilities, like the real wrapper."""
 
     def score(self, query, passages):
-        return np.array([4.0 if "BLEU" in p else -4.0 for p in passages], dtype=np.float32)
+        return np.array([0.9 if "BLEU" in p else 0.05 for p in passages], dtype=np.float32)
 
 
 def test_min_relevance_drops_weak_chunks(indexed):
@@ -114,7 +114,11 @@ def test_min_relevance_drops_weak_chunks(indexed):
     r = HybridRetriever(store, emb, reranker=KeywordReranker())
 
     hits = r.search("What BLEU score does the Transformer get?", top_k=10, min_relevance=0.3)
-    assert hits and all("BLEU" in h["text"] and h["relevance"] >= 0.3 for h in hits)
+    assert hits and all("BLEU" in h["text"] for h in hits)
+    # probabilities pass through untouched (no second sigmoid squashing them toward 0.5-0.73)
+    assert {h["relevance"] for h in hits} == {0.9}
+    weak = r.search("What BLEU score does the Transformer get?", top_k=10)
+    assert min(h["relevance"] for h in weak) == 0.05
     assert len(hits) < len(r.search("What BLEU score does the Transformer get?", top_k=10))
 
     # nothing clears a very high bar -> empty, so the LLM is never asked to improvise
@@ -142,6 +146,51 @@ def test_prompt_numbers_sources():
             {"ref": 2, "title": "Paper B", "page": None, "text": "beta"}]
     user = build_messages("q?", hits)[1]["content"]
     assert "[1] Paper A, page 3" in user and "[2] Paper B\nbeta" in user
+
+
+def _title_pdf(path, lines, header=None, meta=None):
+    """lines: list of title lines, each a list of (size, text) runs."""
+    canvas = pytest.importorskip("reportlab.pdfgen.canvas")
+    c = canvas.Canvas(str(path))
+    if meta:
+        c.setTitle(meta)
+    if header:
+        c.setFont("Times-Roman", 9)
+        c.drawString(72, 780, header)
+    c.saveState()   # rotated arXiv-style stamp in a big font, drawn via the page transform
+    c.setFont("Times-Roman", 20); c.translate(30, 300); c.rotate(90)
+    c.drawString(0, 0, "arXiv:2010.11929v2 [cs.CV] 3 Jun 2021")
+    c.restoreState()
+    y = 700
+    for line in lines:
+        t = c.beginText(110, y)
+        for size, text in line:
+            t.setFont("Times-Bold", size)
+            t.textOut(text)
+        c.drawText(t)
+        y -= max(s for s, _ in line) * 1.3
+    c.setFont("Times-Roman", 11)
+    c.drawString(72, y - 20, "First Author, Second Author  Some University")
+    c.save()
+    return parse_document(path, size=220, overlap=40).title
+
+
+@pytest.mark.parametrize("lines, header, meta, expected", [
+    ([[(17, "Attention Is All You Need")]],
+     "Provided proper attribution is provided, Google hereby grants permission to", None,
+     "Attention Is All You Need"),
+    ([[(17, "A"), (13, "N "), (17, "I"), (13, "MAGE IS "), (17, "W"), (13, "ORTH "), (17, "16"), (13, "X"), (17, "16 W"), (13, "ORDS")]],
+     "Published as a conference paper at ICLR 2021", None,
+     "AN IMAGE IS WORTH 16X16 WORDS"),                              # small caps
+    ([[(18, "Deep Residual Learning")], [(15.5, "for Image Recognition")]], None, None,
+     "Deep Residual Learning for Image Recognition"),               # wrapped, second line smaller
+    ([[(17, "Language Models are Few-Shot Learners")]], None, "arXiv preprint",
+     "Language Models are Few-Shot Learners"),                      # junk metadata ignored
+    ([[(17, "Something Else")]], None, "Denoising Diffusion Probabilistic Models",
+     "Denoising Diffusion Probabilistic Models"),                   # good metadata still wins
+])
+def test_pdf_title_detection(tmp_path, lines, header, meta, expected):
+    assert _title_pdf(tmp_path / "t.pdf", lines, header, meta) == expected
 
 
 def test_pdf_pages_are_tracked(tmp_path):
