@@ -50,8 +50,13 @@ async function refreshStatus() {
       : h.llm.reachable
         ? `<span class="dot warn"></span>run: ollama pull ${esc(h.llm.model)}`
         : `<span class="dot err"></span>LLM offline`;
+    const index = h.reindexing
+      ? `<a class="pill" href="/library"><span class="spinner"></span>rebuilding index</a>`
+      : h.needs_reindex
+        ? `<a class="pill" href="/library" title="Embedding model changed"><span class="dot warn"></span>rebuild needed</a>`
+        : `<span class="pill">${h.index.documents} papers · ${h.index.chunks} chunks</span>`;
     box.innerHTML = `
-      <span class="pill">${h.index.documents} papers · ${h.index.chunks} chunks</span>
+      ${index}
       <span class="pill" title="Answers are generated locally via Ollama">${llm}</span>`;
   } catch {
     box.innerHTML = `<span class="pill"><span class="dot err"></span>server offline</span>`;

@@ -141,6 +141,62 @@ def test_model_mismatch_is_caught(indexed, tmp_path):
         IndexStore(tmp_path / "index", tmp_path / "uploads", "another-model")
 
 
+def test_mismatch_can_be_tolerated_for_the_web_app(indexed, tmp_path):
+    store = IndexStore(tmp_path / "index", tmp_path / "uploads", "another-model", allow_mismatch=True)
+    assert store.stale_model == "hash" and store.stats()["documents"] == 2
+
+
+def test_rebuild_reembeds_and_keeps_titles(indexed, tmp_path):
+    from app.reindex import rebuild
+
+    store, emb = indexed
+    store.update("d0", title="My renamed title")
+    for doc in store.list_documents():            # rebuild re-reads the original files from uploads/
+        (tmp_path / doc["filename"]).rename(tmp_path / "uploads" / doc["stored_as"])
+
+    seen = []
+    new = rebuild(tmp_path / "index", tmp_path / "uploads", "new-model", emb, 60, 15,
+                  progress=lambda done, total, title: seen.append((done, total)))
+
+    assert new.stale_model is None and new.embed_model == "new-model"
+    assert new.documents["d0"]["title"] == "My renamed title"
+    assert len(new.chunks) == len(store.chunks) and new.embeddings.shape[0] == len(new.chunks)
+    assert seen[-1] == (2, 2)
+    assert not list(tmp_path.glob("index.bak-*"))  # backup cleaned up
+    IndexStore(tmp_path / "index", tmp_path / "uploads", "new-model")   # loads without complaint
+
+
+def test_failed_rebuild_restores_old_index(indexed, tmp_path):
+    from app.reindex import rebuild
+
+    store, _ = indexed
+    for doc in store.list_documents():
+        (tmp_path / doc["filename"]).rename(tmp_path / "uploads" / doc["stored_as"])
+
+    class Broken:
+        def encode_docs(self, texts):
+            raise RuntimeError("model crashed")
+
+    with pytest.raises(RuntimeError):
+        rebuild(tmp_path / "index", tmp_path / "uploads", "new-model", Broken(), 60, 15)
+    restored = IndexStore(tmp_path / "index", tmp_path / "uploads", "hash")
+    assert restored.stats() == store.stats()
+
+
+def test_interrupted_rebuild_is_recovered(indexed, tmp_path):
+    from app.reindex import recover_interrupted
+
+    store, _ = indexed
+    index = tmp_path / "index"
+    index.rename(tmp_path / "index.bak-123")          # what rebuild() does first...
+    IndexStore(index, tmp_path / "uploads", "new-model")   # ...then the server dies mid-build
+
+    assert recover_interrupted(index)
+    assert IndexStore(index, tmp_path / "uploads", "hash").stats() == store.stats()
+    assert not list(tmp_path.glob("index.bak-*"))
+    assert not recover_interrupted(index)             # nothing to do the second time
+
+
 def test_prompt_numbers_sources():
     hits = [{"ref": 1, "title": "Paper A", "page": 3, "text": "alpha"},
             {"ref": 2, "title": "Paper B", "page": None, "text": "beta"}]

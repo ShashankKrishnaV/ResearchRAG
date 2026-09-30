@@ -31,6 +31,8 @@
 }
 
 * { box-sizing: border-box; }
+/* author `display:` rules (e.g. .banner { display:flex }) otherwise beat the browser's [hidden] rule */
+[hidden] { display: none !important; }
 html, body { margin: 0; }
 body {
   background: var(--bg);
@@ -131,6 +133,22 @@ input[type=text]:focus, textarea:focus, select:focus { outline: 2px solid var(--
 .section-head { display: flex; align-items: center; gap: 12px; margin: 36px 0 12px; }
 .section-head h2 { font-size: 18px; margin: 0; }
 .section-head input { margin-left: auto; width: 260px; max-width: 50%; }
+
+.banner {
+  display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
+  padding: 14px 18px; margin-bottom: 16px;
+  border-color: color-mix(in srgb, var(--warn) 45%, var(--border));
+  background: color-mix(in srgb, var(--warn) 8%, var(--surface));
+}
+.banner.busy { border-color: var(--accent); background: var(--accent-soft); }
+.banner.failed { border-color: var(--err); }
+.banner.done { border-color: color-mix(in srgb, var(--ok) 50%, var(--border)); background: color-mix(in srgb, var(--ok) 8%, var(--surface)); }
+.banner .check { color: var(--ok); font-weight: 700; font-size: 18px; }
+.banner .grow { flex: 1; min-width: 240px; font-size: 14px; }
+.banner code { font-size: 12.5px; background: var(--surface-2); padding: 1px 5px; border-radius: 4px; }
+.progress { height: 6px; border-radius: 3px; background: var(--surface-2); overflow: hidden; margin-top: 8px; }
+.progress > i { display: block; height: 100%; background: var(--accent); transition: width .3s; }
+.dropzone.disabled { opacity: .45; pointer-events: none; }
 
 .doc-list { display: flex; flex-direction: column; }
 .doc-row {

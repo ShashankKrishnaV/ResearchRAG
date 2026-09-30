@@ -68,25 +68,36 @@ ResearchRAG/
 Requirements: Python 3.9+, [Ollama](https://ollama.com), ~6 GB free disk for the models.
 
 ```bash
-# 1. local LLM
-ollama pull command-r7b
-
-# 2. python deps
-python3 -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt
-
-# 3. run
-./run.sh            # or: uvicorn app.main:app --reload
+git clone <this-repo> && cd ResearchRAG
+./run.sh
 ```
 
-Open http://localhost:8000 — **Library** to upload, **Ask** to query.
+On first run, `run.sh` creates the virtualenv, installs dependencies, copies `.env.example` to `.env`,
+starts Ollama if needed and pulls the configured LLM. Open http://localhost:8000 — **Library** to upload, **Ask** to query.
 
 The embedding and reranker models (~200 MB total) download automatically on first start.
 
+<details>
+<summary>Manual setup (without run.sh)</summary>
+
+```bash
+cp .env.example .env               # optional — every setting has a default
+ollama pull command-r7b
+python3 -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt
+uvicorn app.main:app --reload
+```
+</details>
+
 ## Configuration
 
-All settings live in `app/config.py` and can be overridden with environment variables
-(copy `.env.example` to `.env`):
+Defaults live in `app/config.py`. To change them, edit your local `.env`
+(it's gitignored — `.env.example` is the committed template, and `run.sh` creates `.env` from it on first run).
+Any of these can also be set for a single run from the shell, which takes priority over `.env`:
+
+```bash
+RAG_LLM_MODEL=llama3.1:8b ./run.sh
+```
 
 | Variable | Default |
 |---|---|
@@ -96,8 +107,53 @@ All settings live in `app/config.py` and can be overridden with environment vari
 | `RAG_LLM_MODEL` | `command-r7b` |
 | `OLLAMA_URL` | `http://localhost:11434` |
 | `RAG_CHUNK_WORDS` / `RAG_CHUNK_OVERLAP` | `220` / `40` |
+| `RAG_DEVICE` | auto (`mps` on Apple Silicon); set `cpu` if embedding ever stalls |
 | `RAG_TOP_K` | `6` (max sources per answer) |
 | `RAG_MIN_RELEVANCE` | `0.30` (reranker cutoff, adjustable per question in the UI) |
+
+## Switching models
+
+All three models are set in your local `.env` (created from `.env.example` on first run — see [Configuration](#configuration)).
+Restart the app after changing them. When you want a new default for everyone who clones the repo,
+change `.env.example` instead.
+
+**LLM (answers):** safe to change any time, no re-indexing.
+
+```bash
+# in .env
+RAG_LLM_MODEL=qwen2.5:14b          # or command-r (35B), llama3.1:8b, mistral-nemo ...
+```
+
+`./run.sh` pulls the model if it isn't downloaded yet (or run `ollama pull qwen2.5:14b` yourself).
+
+Rough guide for Apple Silicon: 7–8B models run on 16 GB, 14B needs ~24 GB, 32–35B needs 32 GB+.
+The header pill shows whether the model is pulled and ready.
+
+**Reranker:** safe to change any time. Stronger (slower) option:
+
+```bash
+RAG_RERANK_MODEL=BAAI/bge-reranker-base      # or BAAI/bge-reranker-v2-m3 for multilingual papers
+```
+
+A different reranker scores on a slightly different scale, so recheck the 30% threshold in the UI.
+
+**Embeddings:** vectors from different models can't be mixed, so rebuild the index after switching:
+
+```bash
+# .env
+RAG_EMBED_MODEL=BAAI/bge-base-en-v1.5        # or BAAI/bge-large-en-v1.5
+```
+
+Restart the app. The Library page shows a **Rebuild index** banner. Click it to re-embed every paper,
+with a live progress bar (titles and files are kept). Search and uploads pause until it finishes, and
+if anything fails the previous index is restored. Prefer the terminal? Stop the server and run
+`python -m app.reindex`, which does the same thing.
+
+The **Rebuild index** button next to the paper list also re-applies changed chunk settings
+(`RAG_CHUNK_WORDS` / `RAG_CHUNK_OVERLAP`).
+
+**Trying LLMs side by side:** the Ask page has a model dropdown listing everything you've pulled in
+Ollama, so you can compare answers per question without touching `.env`.
 
 ## API
 
@@ -108,7 +164,9 @@ All settings live in `app/config.py` and can be overridden with environment vari
 | `DELETE` | `/api/documents/{id}` | remove a paper and its chunks |
 | `GET` | `/api/documents/{id}/file` | original file (append `#page=N` for PDFs) |
 | `POST` | `/api/search` | retrieval only → ranked, cited chunks |
-| `POST` | `/api/ask` | streamed answer (NDJSON: `sources`, `token`, `done`) |
+| `POST` | `/api/ask` | streamed answer (NDJSON: `sources`, `token`, `done`); optional `llm_model` |
+| `GET` | `/api/llm/models` | chat models pulled in Ollama + the configured default |
+| `GET` / `POST` | `/api/reindex` | rebuild status / start a background rebuild |
 | `GET` | `/api/health` | index stats + LLM availability |
 
 ## Tests
