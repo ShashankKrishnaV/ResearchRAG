@@ -68,25 +68,36 @@ ResearchRAG/
 Requirements: Python 3.9+, [Ollama](https://ollama.com), ~6 GB free disk for the models.
 
 ```bash
-# 1. local LLM
-ollama pull command-r7b
-
-# 2. python deps
-python3 -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt
-
-# 3. run
-./run.sh            # or: uvicorn app.main:app --reload
+git clone <this-repo> && cd ResearchRAG
+./run.sh
 ```
 
-Open http://localhost:8000 — **Library** to upload, **Ask** to query.
+On first run, `run.sh` creates the virtualenv, installs dependencies, copies `.env.example` to `.env`,
+starts Ollama if needed and pulls the configured LLM. Open http://localhost:8000 — **Library** to upload, **Ask** to query.
 
 The embedding and reranker models (~200 MB total) download automatically on first start.
 
+<details>
+<summary>Manual setup (without run.sh)</summary>
+
+```bash
+cp .env.example .env               # optional — every setting has a default
+ollama pull command-r7b
+python3 -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt
+uvicorn app.main:app --reload
+```
+</details>
+
 ## Configuration
 
-All settings live in `app/config.py` and can be overridden with environment variables
-(copy `.env.example` to `.env`):
+Defaults live in `app/config.py`. To change them, edit your local `.env`
+(it's gitignored — `.env.example` is the committed template, and `run.sh` creates `.env` from it on first run).
+Any of these can also be set for a single run from the shell, which takes priority over `.env`:
+
+```bash
+RAG_LLM_MODEL=llama3.1:8b ./run.sh
+```
 
 | Variable | Default |
 |---|---|
@@ -101,15 +112,18 @@ All settings live in `app/config.py` and can be overridden with environment vari
 
 ## Switching models
 
-All three models are set in `.env` (copy from `.env.example`). Restart the app after changing them.
+All three models are set in your local `.env` (created from `.env.example` on first run — see [Configuration](#configuration)).
+Restart the app after changing them. When you want a new default for everyone who clones the repo,
+change `.env.example` instead.
 
 **LLM (answers):** safe to change any time, no re-indexing.
 
 ```bash
-ollama pull qwen2.5:14b            # or command-r (35B), llama3.1:8b, mistral-nemo ...
-# .env
-RAG_LLM_MODEL=qwen2.5:14b
+# in .env
+RAG_LLM_MODEL=qwen2.5:14b          # or command-r (35B), llama3.1:8b, mistral-nemo ...
 ```
+
+`./run.sh` pulls the model if it isn't downloaded yet (or run `ollama pull qwen2.5:14b` yourself).
 
 Rough guide for Apple Silicon: 7–8B models run on 16 GB, 14B needs ~24 GB, 32–35B needs 32 GB+.
 The header pill shows whether the model is pulled and ready.

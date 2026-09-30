@@ -9,7 +9,15 @@ if [ ! -d .venv ]; then
   .venv/bin/pip install -q -r requirements.txt
 fi
 
-MODEL="${RAG_LLM_MODEL:-command-r7b}"
+# .env is gitignored, so fresh clones start from the committed template
+if [ ! -f .env ] && [ -f .env.example ]; then
+  echo "→ creating .env from .env.example"
+  cp .env.example .env
+fi
+
+# same precedence as app/config.py: shell variable > .env > default
+env_model="$(grep -E '^RAG_LLM_MODEL=' .env 2>/dev/null | tail -1 | cut -d= -f2- | tr -d "\"' ")"
+MODEL="${RAG_LLM_MODEL:-${env_model:-command-r7b}}"
 if command -v ollama >/dev/null 2>&1; then
   if ! curl -s http://localhost:11434/api/tags >/dev/null; then
     echo "→ starting ollama"
