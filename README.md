@@ -107,6 +107,7 @@ RAG_LLM_MODEL=llama3.1:8b ./run.sh
 | `RAG_LLM_MODEL` | `command-r7b` |
 | `OLLAMA_URL` | `http://localhost:11434` |
 | `RAG_CHUNK_WORDS` / `RAG_CHUNK_OVERLAP` | `220` / `40` |
+| `RAG_DEVICE` | auto (`mps` on Apple Silicon); set `cpu` if embedding ever stalls |
 | `RAG_TOP_K` | `6` (max sources per answer) |
 | `RAG_MIN_RELEVANCE` | `0.30` (reranker cutoff, adjustable per question in the UI) |
 
@@ -141,11 +142,18 @@ A different reranker scores on a slightly different scale, so recheck the 30% th
 ```bash
 # .env
 RAG_EMBED_MODEL=BAAI/bge-base-en-v1.5        # or BAAI/bge-large-en-v1.5
-# stop the server, then
-python -m app.reindex                        # re-embeds every uploaded paper, keeps titles
 ```
 
-If you forget, the app refuses to start and tells you to run the command above.
+Restart the app. The Library page shows a **Rebuild index** banner. Click it to re-embed every paper,
+with a live progress bar (titles and files are kept). Search and uploads pause until it finishes, and
+if anything fails the previous index is restored. Prefer the terminal? Stop the server and run
+`python -m app.reindex`, which does the same thing.
+
+The **Rebuild index** button next to the paper list also re-applies changed chunk settings
+(`RAG_CHUNK_WORDS` / `RAG_CHUNK_OVERLAP`).
+
+**Trying LLMs side by side:** the Ask page has a model dropdown listing everything you've pulled in
+Ollama, so you can compare answers per question without touching `.env`.
 
 ## API
 
@@ -156,7 +164,9 @@ If you forget, the app refuses to start and tells you to run the command above.
 | `DELETE` | `/api/documents/{id}` | remove a paper and its chunks |
 | `GET` | `/api/documents/{id}/file` | original file (append `#page=N` for PDFs) |
 | `POST` | `/api/search` | retrieval only → ranked, cited chunks |
-| `POST` | `/api/ask` | streamed answer (NDJSON: `sources`, `token`, `done`) |
+| `POST` | `/api/ask` | streamed answer (NDJSON: `sources`, `token`, `done`); optional `llm_model` |
+| `GET` | `/api/llm/models` | chat models pulled in Ollama + the configured default |
+| `GET` / `POST` | `/api/reindex` | rebuild status / start a background rebuild |
 | `GET` | `/api/health` | index stats + LLM availability |
 
 ## Tests

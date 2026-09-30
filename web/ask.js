@@ -3,6 +3,7 @@ const questionEl = $("#question");
 const askBtn = $("#ask-btn");
 const topKEl = $("#top-k");
 const minRelEl = $("#min-rel");
+const llmEl = $("#llm-model");
 const answerWrap = $("#answer-wrap");
 const sourcesEl = $("#sources");
 const filterBtn = $("#filter-btn");
@@ -210,8 +211,28 @@ function payload(question) {
     question,
     top_k: +topKEl.value,
     min_relevance: +minRelEl.value,
+    llm_model: llmEl.value || null,
     doc_ids: selected.size ? [...selected] : null,
   });
+}
+
+// answer model: whatever is pulled in Ollama, defaulting to the configured one
+async function loadModels() {
+  const { models, default: def } = await fetch("/api/llm/models").then(r => r.json());
+  const names = models.includes(def) || models.some(m => m.split(":")[0] === def) ? models : [def, ...models];
+  llmEl.innerHTML = names.map(m => `<option value="${esc(m)}">${esc(m)}${m.split(":")[0] === def.split(":")[0] ? " (default)" : ""}</option>`).join("");
+
+  const saved = store.get("rag-llm", null);
+  const fallback = names.find(m => m.split(":")[0] === def.split(":")[0]) || def;
+  llmEl.value = names.includes(saved) ? saved : fallback;
+  llmEl.hidden = names.length < 2;   // nothing to choose from
+}
+llmEl.addEventListener("change", () => store.set("rag-llm", llmEl.value));
+
+async function postJSON(url, body) {
+  const res = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body });
+  if (!res.ok) throw new Error((await res.json().catch(() => ({}))).detail || `HTTP ${res.status}`);
+  return res;
 }
 
 // remember the threshold between visits
@@ -219,8 +240,7 @@ minRelEl.value = store.get("rag-min-rel", minRelEl.value);
 minRelEl.addEventListener("change", () => store.set("rag-min-rel", minRelEl.value));
 
 async function runPassages(question) {
-  const res = await fetch("/api/search", { method: "POST", headers: { "Content-Type": "application/json" }, body: payload(question) });
-  const data = await res.json();
+  const data = await (await postJSON("/api/search", payload(question))).json();
   hits = data.hits;
   renderSources();
   renderAnswer({
@@ -234,10 +254,10 @@ async function runAnswer(question) {
   renderSources();
   renderAnswer({ streaming: true });
 
-  const res = await fetch("/api/ask", { method: "POST", headers: { "Content-Type": "application/json" }, body: payload(question) });
+  const res = await postJSON("/api/ask", payload(question));
   const reader = res.body.getReader();
   const decoder = new TextDecoder();
-  let buf = "", text = "", note = "", retrievalMs = 0, totalMs = 0, pending = false;
+  let buf = "", text = "", note = "", retrievalMs = 0, totalMs = 0, pending = false, usedModel = "";
 
   const paint = () => {
     if (pending) return;
@@ -254,7 +274,7 @@ async function runAnswer(question) {
     for (const line of lines) {
       if (!line.trim()) continue;
       const ev = JSON.parse(line);
-      if (ev.type === "sources") { hits = ev.hits; retrievalMs = ev.retrieval_ms; renderSources(); }
+      if (ev.type === "sources") { hits = ev.hits; retrievalMs = ev.retrieval_ms; usedModel = ev.model; renderSources(); }
       else if (ev.type === "token") { text += ev.text; paint(); }
       else if (ev.type === "error") note = esc(ev.message);
       else if (ev.type === "done") totalMs = ev.total_ms;
@@ -266,7 +286,7 @@ async function runAnswer(question) {
   renderAnswer({
     text,
     note,
-    meta: text ? `Answered from ${hits.length} relevant source${hits.length === 1 ? "" : "s"} · retrieval ${retrievalMs} ms · total ${(totalMs / 1000).toFixed(1)} s` : "",
+    meta: text ? `Answered from ${hits.length} relevant source${hits.length === 1 ? "" : "s"} · ${esc(usedModel)} · retrieval ${retrievalMs} ms · total ${(totalMs / 1000).toFixed(1)} s` : "",
   });
 }
 
@@ -291,4 +311,5 @@ form.addEventListener("submit", async e => {
 });
 
 loadDocs();
+loadModels();
 renderHistory();

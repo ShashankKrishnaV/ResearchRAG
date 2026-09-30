@@ -26,6 +26,8 @@
       <p>Upload research papers once — they're parsed, chunked and indexed locally so you can ask questions across all of them.</p>
     </div>
 
+    <div class="card banner" id="reindex-banner" hidden></div>
+
     <label class="dropzone" id="dropzone">
       <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
         <path d="M12 16V4"/><path d="m6 10 6-6 6 6"/><path d="M4 20h16"/>
@@ -40,6 +42,7 @@
     <div class="section-head">
       <h2>Indexed papers <span class="muted small" id="doc-count"></span></h2>
       <input type="text" id="doc-filter" placeholder="Filter by title or file name…">
+      <button class="btn ghost small" id="rebuild-btn" title="Re-parse and re-embed every paper with the current settings">Rebuild index</button>
     </div>
     <div class="card doc-list" id="doc-list"><div class="empty">Loading…</div></div>
   </main>

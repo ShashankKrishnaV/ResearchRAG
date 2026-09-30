@@ -35,9 +35,9 @@ def build_messages(question: str, hits: list[dict]) -> list[dict]:
     return [{"role": "system", "content": SYSTEM_PROMPT}, {"role": "user", "content": user}]
 
 
-def stream_answer(question: str, hits: list[dict]) -> Iterator[str]:
+def stream_answer(question: str, hits: list[dict], model: str | None = None) -> Iterator[str]:
     body = {
-        "model": settings.llm_model,
+        "model": model or settings.llm_model,
         "messages": build_messages(question, hits),
         "stream": True,
         "options": {"temperature": settings.llm_temperature, "num_ctx": 8192},
@@ -60,6 +60,22 @@ def stream_answer(question: str, hits: list[dict]) -> Iterator[str]:
                     break
     except httpx.HTTPError as e:
         raise LLMUnavailable(f"Can't reach Ollama at {settings.ollama_url} ({e.__class__.__name__}). Is `ollama serve` running?") from e
+
+
+def list_models() -> list[str]:
+    """Chat models already pulled into Ollama (embedding-only models filtered out)."""
+    try:
+        r = httpx.get(f"{settings.ollama_url}/api/tags", timeout=2)
+        models = r.json().get("models", [])
+    except Exception:
+        return []
+    names = []
+    for m in models:
+        families = (m.get("details") or {}).get("families") or []
+        if "bert" in families or "embed" in m.get("name", ""):
+            continue
+        names.append(m["name"])
+    return sorted(names)
 
 
 def llm_status() -> dict:

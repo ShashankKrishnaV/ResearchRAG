@@ -27,6 +27,7 @@ class Settings:
     embed_model: str = os.getenv("RAG_EMBED_MODEL", "BAAI/bge-small-en-v1.5")
     rerank_model: str = os.getenv("RAG_RERANK_MODEL", "cross-encoder/ms-marco-MiniLM-L-6-v2")
     use_reranker: bool = os.getenv("RAG_USE_RERANKER", "1") == "1"
+    device: str = os.getenv("RAG_DEVICE") or None   # cpu | mps | cuda; empty = pick automatically
 
     llm_model: str = os.getenv("RAG_LLM_MODEL", "command-r7b")
     ollama_url: str = os.getenv("OLLAMA_URL", "http://localhost:11434")

@@ -18,7 +18,11 @@ def _atomic_write(path: Path, write_fn) -> None:
 
 
 class IndexStore:
-    def __init__(self, index_dir: Path, upload_dir: Path, embed_model: str):
+    def __init__(self, index_dir: Path, upload_dir: Path, embed_model: str, allow_mismatch: bool = False):
+        # allow_mismatch: load an index built with another embedding model instead of failing,
+        # so the web app can start and offer a rebuild (see `stale_model`)
+        self.allow_mismatch = allow_mismatch
+        self.stale_model: str | None = None
         self.index_dir, self.upload_dir = Path(index_dir), Path(upload_dir)
         self.index_dir.mkdir(parents=True, exist_ok=True)
         self.upload_dir.mkdir(parents=True, exist_ok=True)
@@ -42,10 +46,14 @@ class IndexStore:
             data = json.loads(self._docs_path.read_text())
             saved_model = data.get("embed_model")
             if saved_model and saved_model != self.embed_model:
-                raise RuntimeError(
-                    f"Index was built with '{saved_model}' but config uses '{self.embed_model}'. "
-                    "Run `python -m app.reindex` to rebuild it, or switch the model back."
-                )
+                if self.allow_mismatch:
+                    self.stale_model = saved_model
+                    self.embed_model = saved_model   # keep saving under the model the vectors came from
+                else:
+                    raise RuntimeError(
+                        f"Index was built with '{saved_model}' but config uses '{self.embed_model}'. "
+                        "Run `python -m app.reindex` to rebuild it, or switch the model back."
+                    )
             self.documents = {d["id"]: d for d in data.get("documents", [])}
         if self._chunks_path.exists():
             with self._chunks_path.open() as f:
