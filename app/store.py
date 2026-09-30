@@ -44,7 +44,7 @@ class IndexStore:
             if saved_model and saved_model != self.embed_model:
                 raise RuntimeError(
                     f"Index was built with '{saved_model}' but config uses '{self.embed_model}'. "
-                    "Delete data/index/ and re-upload, or switch the model back."
+                    "Run `python -m app.reindex` to rebuild it, or switch the model back."
                 )
             self.documents = {d["id"]: d for d in data.get("documents", [])}
         if self._chunks_path.exists():

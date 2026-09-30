@@ -99,6 +99,40 @@ All settings live in `app/config.py` and can be overridden with environment vari
 | `RAG_TOP_K` | `6` (max sources per answer) |
 | `RAG_MIN_RELEVANCE` | `0.30` (reranker cutoff, adjustable per question in the UI) |
 
+## Switching models
+
+All three models are set in `.env` (copy from `.env.example`). Restart the app after changing them.
+
+**LLM (answers):** safe to change any time, no re-indexing.
+
+```bash
+ollama pull qwen2.5:14b            # or command-r (35B), llama3.1:8b, mistral-nemo ...
+# .env
+RAG_LLM_MODEL=qwen2.5:14b
+```
+
+Rough guide for Apple Silicon: 7–8B models run on 16 GB, 14B needs ~24 GB, 32–35B needs 32 GB+.
+The header pill shows whether the model is pulled and ready.
+
+**Reranker:** safe to change any time. Stronger (slower) option:
+
+```bash
+RAG_RERANK_MODEL=BAAI/bge-reranker-base      # or BAAI/bge-reranker-v2-m3 for multilingual papers
+```
+
+A different reranker scores on a slightly different scale, so recheck the 30% threshold in the UI.
+
+**Embeddings:** vectors from different models can't be mixed, so rebuild the index after switching:
+
+```bash
+# .env
+RAG_EMBED_MODEL=BAAI/bge-base-en-v1.5        # or BAAI/bge-large-en-v1.5
+# stop the server, then
+python -m app.reindex                        # re-embeds every uploaded paper, keeps titles
+```
+
+If you forget, the app refuses to start and tells you to run the command above.
+
 ## API
 
 | Method | Path | Purpose |
